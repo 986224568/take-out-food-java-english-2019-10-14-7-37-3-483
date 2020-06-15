@@ -1,3 +1,6 @@
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 
 /*
@@ -14,7 +17,112 @@ public class App {
 
     public String bestCharge(List<String> inputs) {
         //TODO: write code here
+        if (inputs == null || inputs.size() == 0) {
+            return null;
+        }
+        StringBuffer result = new StringBuffer();
+        result.append("============= Order details =============\n");
+        //map用于存放菜ID和数量
+        HashMap<String, Integer> map = new HashMap<>();
+        String id = "";
+        int nums = 0;
+        String[] temp = new String[2];
+        //将inputs里面的菜ID和数量存放到map里面
+        for (String s : inputs) {
+            temp = s.split(" x ");
+            id = temp[0];
+            nums = Integer.valueOf(temp[1]);
+            map.put(id, nums);
+        }
+        List<Item> items = itemRepository.findAll();
+        List<SalesPromotion> salesPromotion = salesPromotionRepository.findAll();
+        for (Item item : items) {
+            for (String key : map.keySet()) {
+                if (key.equals(item.getId())) {
+                    result.append(item.getName() + " x " + map.get(key) + " = " + (int)Math.floor(map.get(key) * item.getPrice()) + " yuan\n");
+                }
+            }
+        }
+        HashMap<String, String> result1 = getResult(map);
+        if (!"none".equals(result1.get("promotion"))) {
+            result.append("-----------------------------------\n" +
+                          "Promotion used:\n");
+            if ("half".equals(result1.get("promotion"))) {
+                result.append("Half price for certain dishes (" + result1.get("reProList") + ")，saving " + result1.get("saving") + " yuan\n");
+            } else {
+                result.append("满30减6 yuan，saving 6 yuan\n");
+            }
 
-        return null;
+        }
+        result.append("-----------------------------------\n");
+        result.append("Total："+ result1.get("total") +" yuan\n");
+        result.append("===================================");
+
+        return result.toString();
+    }
+
+    //参数：一个存放菜ID和数量的hashMap
+    private HashMap<String, String> getResult(HashMap<String, Integer> map) {
+        // falg半价大于6就为true 小于等于6为false
+        boolean flag = false;
+        double promotionPrice = 0;
+        double total = 0;
+        //返回特价商品名称
+        StringBuffer sb = new StringBuffer();
+        List<Item> items = itemRepository.findAll();
+        //保存全部价格的map
+        HashMap<String, Double> priceMap = new HashMap<>();
+        HashMap<String, String> nameMap = new HashMap<>();
+        for (Item item : items) {
+            priceMap.put(item.getId(), item.getPrice());
+            nameMap.put(item.getId(), item.getName());
+        }
+        List<SalesPromotion> salesPromotion = salesPromotionRepository.findAll();
+        //保存特价商品list
+        List<String> relatedItems = null;
+        for (SalesPromotion sp : salesPromotion) {
+            if (!(sp.getRelatedItems().size() == 0)) {
+                relatedItems = sp.getRelatedItems();
+            }
+        }
+        for (String id : map.keySet()) {
+            //将已购买的半价商品计算半价前的价格存到promotionPrice里
+            if (relatedItems.contains(id)) {
+                sb.insert(0,nameMap.get(id) + "，");
+                promotionPrice += map.get(id) * priceMap.get(id);
+            } else {
+                //将已购买的不是特价的商品数量乘以价格加到total上
+                total += map.get(id) * priceMap.get(id);
+            }
+        }
+        //若半价商品优惠大于6块，则直接使用半价
+        flag = (promotionPrice * 0.5) > 6.0 ? true : false;
+        HashMap<String, String> result = new HashMap<>();
+        if (flag) {
+            //使用半价优惠
+            result.put("total", (int)Math.floor(total + promotionPrice * 0.5)+"");
+            result.put("promotion", "half");
+            result.put("reProList", sb.deleteCharAt(sb.length() - 1).toString());
+            result.put("saving", ""+(int)Math.floor(promotionPrice * 0.5));
+            return result;
+        } else {
+            if ((total + promotionPrice) >= 30) {
+                //使用满减优惠
+                result.put("total", (int)Math.floor(total + promotionPrice - 6) + "");
+                result.put("promotion", "deduct");
+                return result;
+            } else {
+                //不够30块，只能用半价或者全价
+                result.put("total", (int)Math.floor(total + promotionPrice * 0.5) + "");
+                if (flag) {
+                    result.put("promotion", "half");
+                    result.put("reProList", sb.deleteCharAt(sb.length() - 1).toString());
+                    result.put("saving", ""+(int)Math.floor(promotionPrice * 0.5));
+                } else {
+                    result.put("promotion", "none");
+                }
+                return result;
+            }
+        }
     }
 }
